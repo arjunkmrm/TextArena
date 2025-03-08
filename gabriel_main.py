@@ -1,3 +1,7 @@
+"""
+uv run --with nltk --with anthropic run_online_simple.py
+"""
+
 import textarena as ta
 from rich.console import Console
 from rich.panel import Panel
@@ -71,4 +75,4 @@ while not done:
     ))
 
 
-rewards = env.close()onlin
+rewards = env.close()
