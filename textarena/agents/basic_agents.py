@@ -6,6 +6,8 @@ from typing import Optional
 from textarena.core import Agent
 import textarena as ta 
 
+from google.genai import types as genai_types
+
 __all__ = [
     "HumanAgent",
     "OpenRouterAgent",
@@ -154,7 +156,8 @@ class GeminiAgent(Agent):
         self.verbose = verbose
 
         try:
-            import google.generativeai as genai
+            from google import genai
+            
         except ImportError:
             raise ImportError(
                 "Google Generative AI package is required for GeminiAgent. "
@@ -162,30 +165,13 @@ class GeminiAgent(Agent):
             )
         
         # Set the Gemini API key from an environment variable
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:
-            raise ValueError("Gemini API key not found. Please set the GEMINI_API_KEY environment variable.")
+            raise ValueError("GOOGLE_API_KEY not found. Please set the GOOGLE_API_KEY environment variable.")
         
-        # Configure the Gemini client
-        genai.configure(api_key=api_key)
-        
-        # Use default generation config if none is provided
-        if generation_config is None:
-            generation_config = {
-                "temperature": 1,
-                "top_p": 0.95,
-                "top_k": 40,
-                "max_output_tokens": 8192,
-                "response_mime_type": "text/plain",
-            }
-        self.generation_config = generation_config
-        
-        # Create the Gemini model
-        self.model = genai.GenerativeModel(
-            model_name=self.model_name,
-            generation_config=self.generation_config
-        )
-    
+        self.client = genai.Client(api_key=api_key)
+
+
     def _make_request(self, observation: str) -> str:
         """
         Make a single API request to Gemini and return the generated message.
@@ -196,14 +182,35 @@ class GeminiAgent(Agent):
         Returns:
             str: The generated response text.
         """
-        response = self.model.generate_content(
-            f"Instructions: {self.system_prompt}\n\n{observation}"
-        )
-        
+        response = self.client.models.generate_content(
+            model=self.model_name,
+            contents=observation,
+            config=genai_types.GenerateContentConfig(
+                system_instruction=self.system_prompt,
+                tools=[genai_types.Tool(
+                    code_execution=genai_types.ToolCodeExecution
+                )],
+                # response_mime_type="application/json",
+            ),
+        )        
         if self.verbose:
             print(f"\nObservation: {observation}\nResponse: {response.text}")
+
+        # for part in response.candidates[0].content.parts:
+        #     if part.text is not None:
+        #         print(part.text)
+        #     if part.executable_code is not None:
+        #         print(part.executable_code)
+        #     if part.code_execution_result is not None:
+        #         print(part.code_execution_result.output)
+        #     if part.inline_data is not None:
+        #         print(part.inline_data.data)
+        #         print("---")
         
-        return response.text.strip()
+        final_text = response.text.strip()
+        final_text = final_text.replace("```json", "").replace("```", "")
+        # print(f"Final text: {final_text}")
+        return json.loads(final_text)["action"]
     
     def _retry_request(self, observation: str, retries: int = 3, delay: int = 5) -> str:
         """
