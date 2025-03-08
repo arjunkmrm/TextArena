@@ -4,7 +4,60 @@ import textarena as ta
 import asyncio
 from typing import Optional
 
-STANDARD_GAME_PROMPT = "You are a competitive game player. Make sure you read the game instructions carefully, and always follow the required format."
+GAMES = {
+    "SpellingBee-v0": True,
+    "SimpleNegotiation-v0": False,
+    "Poker-v0": False,
+}
+
+GAMES_TO_RUN = [k for k, v in GAMES.items() if v]
+
+STANDARD_GAME_PROMPT = """
+You are an elite competitive game player with a PhD in Game Theory. Your mission is to analyze the game instructions, assess the observation, and choose the optimal move to win as fast as possible.
+
+**Instructions:**
+
+1. **Read the Rules:**  
+   Carefully review all game instructions. The observation might not reveal every detail.
+
+2. **Output Format:**  
+   Respond in valid JSON with exactly four keys:
+   - `"thinking"`: Your internal reasoning process.
+   - `"anticipated_moves"`: A list of moves you expect the opponent to make.
+   - `"thinking_about_anticipated_moves"`: Your reasoning on how to counter their moves.
+   - `"action"`: The move you choose based on the game state.
+
+3. **Examples:**
+   - *SpellingBee-v0*  
+     - **Observation:** A list of words.  
+     - **Action:** Choose one word (e.g., `"hello"`).  
+     - **Output Example:**  
+       `{"thinking": "Reviewing available words.", "anticipated_moves": [], "thinking_about_anticipated_moves": "", "action": "hello"}`
+   
+   - *SimpleNegotiation-v0*  
+     - **Observation:** The current negotiation state.  
+     - **Action:** Send a negotiation message (e.g., `"Offer: 50 -> 30"`).  
+     - **Output Example:**  
+       `{"thinking": "Evaluating negotiation state.", "anticipated_moves": [], "thinking_about_anticipated_moves": "", "action": "Offer: 50 -> 30"}`
+   
+   - *Poker-v0*  
+     - **Observation:** The current state of the poker game.  
+     - **Action:** Make a move (e.g., `"Bet 100"`).  
+     - **Output Example:**  
+       `{"thinking": "Assessing hand strength.", "anticipated_moves": [], "thinking_about_anticipated_moves": "", "action": "Bet 100"}`
+
+4. **Strategy Guidelines:**
+   - For *SpellingBee-v0*: Use the tool to select the longest possible word in your first turn.
+   - For *Poker-v0*: Follow the guidance provided by the tool.
+
+5. **Tool Use:**  
+   Always use the available tools if they can help inform your decision.
+
+6. **Flexibility:**  
+   Games may include hidden complexities. Always refer back to the full instructions when deciding your move.
+
+Begin directly with your JSON output code block. Don't give any explanation or commentary.
+""".strip()
 
 class AsyncAnthropicAgent(Agent):
     """Agent class using the Anthropic Claude API to generate responses asynchronously."""
@@ -102,7 +155,7 @@ class MCPAgent(AsyncAnthropicAgent):
         super().__init__(*args, **kwargs)
 
         self.url = smithery.create_smithery_url(
-            "wss://server.smithery.ai/@kwen1510/nltk-map/ws", {"e2bApiKey": os.environ["E2B_API_KEY"]}
+            "wss://server.smithery.ai/@kwen1510/nltk-map/ws"
         )
 
     async def _make_request(self, observation: str) -> str:
@@ -198,35 +251,35 @@ class MCPAgent(AsyncAnthropicAgent):
                                 # Accumulate text responses
                                 final_response_text += content_block.text
 
-                            # Add Assistant Pre-Fill 
-                            messages.append(
-                                {
-                                    "role": "assistant",
-                                    "content": [{"type": "text", "text": "```json\n{\"thinking\"}:"}],
-                                }
-                            )
-
                         # If no tool calls were made, we use the text response
                         if not is_tool_call_pending and not final_response_text:
                             final_response_text = response.content[0].text
-                            final_response_text = "{\"thinking\"}" + final_response_text
-                            final_response_text = json.loads(final_response_text)["action"]
 
                 except Exception as e:
 
                     print(f"Error: {e}")
                     raise e
+                
+            final_text = final_response_text.strip()
+            try:
+                final_text = final_text.split("```json")[1]
+            except:
+                pass
+            final_text = final_text.replace("```json", "").replace("```", "")
+            print(f"Final text: \n {final_text}")
+            final_text = json.loads(final_text)["action"]
 
-            return final_response_text.strip()
+
+            return final_text
 
 import textarena as ta
 
 # Initialize agents
-agents = MCPAgent(model_name="claude-3-7-sonnet-20250219"),
+agents = MCPAgent(model_name="claude-3-7-sonnet-20250219")
 
 # Initialize environment from subset and wrap it
 env = ta.make_online(
-    env_id=["SpellingBee-v0", "SimpleNegotiation-v0", "Poker-v0"], 
+    env_id=GAMES_TO_RUN, 
     model_name="Test 123456789",
     model_description="Test 123456789",
     email="Test 123456789"
@@ -240,8 +293,13 @@ done = False
 
 while not done:
     player_id, observation = env.get_observation()
-    action = asyncio.get_event_loop().run_until_complete(player_id)
+    print(f"##################### {player_id} #####################")
+    print(f"Observation: {observation}")
+    action = asyncio.get_event_loop().run_until_complete(agents(observation))
+    print(f"Action: {action}")
     done, info = env.step(action=action)
+    print(f"Done: {done}")
+    print(f"Info: {info}")
     print("step complete")
     
 rewards = env.close()
