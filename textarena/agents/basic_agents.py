@@ -307,7 +307,7 @@ class OpenAIAgent(Agent):
             **self.kwargs
         )
         
-        return completion.choices[0].message.content.strip()
+        return json.loads(completion.choices[0].message.content.strip())["action"]
     
     def _retry_request(self, observation: str, retries: int = 3, delay: int = 5) -> str:
         """
@@ -554,7 +554,7 @@ class AWSBedrockAgent(Agent):
 
 class AnthropicAgent(Agent):
     """Agent class using the Anthropic Claude API to generate responses."""
-    def __init__(self, model_name: str, system_prompt: Optional[str] = STANDARD_GAME_PROMPT, max_tokens: int = 1000, temperature: float = 0.9, verbose: bool = False, thinking: bool = False, thinking_budget: int = 16_000):
+    def __init__(self, model_name: str, system_prompt: Optional[str] = STANDARD_GAME_PROMPT, max_tokens: int = 1000, temperature: float = 0.9, verbose: bool = False, thinking: bool = False, thinking_budget: int = 16_000, json_prefill: bool = False):
         """
         Initialize the Anthropic agent.
 
@@ -573,6 +573,7 @@ class AnthropicAgent(Agent):
         self.verbose = verbose
         self.thinking: bool = False
         self.thinking_budget: int = 16_000
+        self.json_prefill: bool = json_prefill
         
         try:
             import anthropic
@@ -597,20 +598,36 @@ class AnthropicAgent(Agent):
         else:
             extra_param = {}
 
+        messages = [
+            {"role": "user", "content": [{"type": "text", "text": observation}]}
+        ]
+
+        if self.json_prefill:
+            messages.append({
+                "role": "assistant",
+                "content": [{"type": "text", "text": "```json\n{\"thinking\":"}]
+            })
+            
+
         response = self.client.messages.create(
             model=self.model_name,
             max_tokens=20_000,
             temperature=self.temperature,
             system=self.system_prompt,
-            messages=[
-                {"role": "user", "content": [{"type": "text", "text": observation}]}
-            ],
+            messages=messages,
             **extra_param
         )
-        
         if self.thinking:
             return json.loads(response.content[1].text.strip())["action"]
-        return json.loads(response.content[0].text.strip())["action"]
+        else:
+            if self.json_prefill:
+                text = response.content[0].text.strip()
+                text = text.replace("```", "")
+                text = "{\"thinking\":" + text
+                text = text.replace("\n", " ")
+                return json.loads(text)["action"]
+            else:
+                return json.loads(response.content[0].text.strip())["action"]
     
     def _retry_request(self, observation: str, retries: int = 3, delay: int = 5) -> str:
         """
