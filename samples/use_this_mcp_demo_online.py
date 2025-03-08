@@ -7,7 +7,10 @@ from typing import Optional
 GAMES = {
     "SpellingBee-v0": False,
     "SimpleNegotiation-v0": False,
-    "Poker-v0": True,
+    "Poker-v0": False,
+    "Nim-v0": True,
+    "TruthAndDeception-v0": True,
+    "Snake-v0": True,
 }
 
 GAMES_TO_RUN = [k for k, v in GAMES.items() if v]
@@ -53,7 +56,8 @@ You are an elite competitive game player with a PhD in Game Theory. Your mission
    - For *Poker-v0*: Follow the guidance provided by the tool.
 
 5. **Tool Use:**  
-   Always use the available tools if they can help inform your decision.
+   Only use the respective tool for spelling bee and poker.
+   JUST TAKE THE ANSWER FROM THE TOOL AS THE TRUTH
 
 6. **Flexibility:**  
    Games may include hidden complexities. Always refer back to the full instructions when deciding your move.
@@ -63,7 +67,7 @@ Begin directly with your JSON output code block. Don't give any explanation or c
 
 class AsyncAnthropicAgent(Agent):
     """Agent class using the Anthropic Claude API to generate responses asynchronously."""
-    def __init__(self, model_name: str, system_prompt: Optional[str] = STANDARD_GAME_PROMPT, max_tokens: int = 1000, temperature: float = 0.9, verbose: bool = False):
+    def __init__(self, model_name: str, system_prompt: Optional[str] = STANDARD_GAME_PROMPT, max_tokens: int = 1000, temperature: float = 0, verbose: bool = False):
         """
         Initialize the Anthropic agent.
 
@@ -265,8 +269,8 @@ class MCPAgent(AsyncAnthropicAgent):
             final_text = final_response_text.strip()
             
             try:
-                final_text = final_text.split("```json")[1]
-                final_text = "```json" + final_text
+                final_text = final_text.split("{\"thinking\":")[1]
+                final_text = "{\"thinking\":" + final_text
             except:
                 try:
                     final_text = final_text.split("```")[1]
@@ -308,6 +312,6 @@ while not done:
     print(f"Done: {done}")
     print(f"Info: {info}")
     print("step complete")
-    
+
 rewards = env.close()
 print(rewards)
