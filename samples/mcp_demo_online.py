@@ -1,17 +1,108 @@
-import os
+
+from textarena.core import Agent
+import textarena as ta
 import asyncio
-import json
+from typing import Optional
+
+STANDARD_GAME_PROMPT = "You are a competitive game player. Make sure you read the game instructions carefully, and always follow the required format."
+
+class AsyncAnthropicAgent(Agent):
+    """Agent class using the Anthropic Claude API to generate responses asynchronously."""
+    def __init__(self, model_name: str, system_prompt: Optional[str] = STANDARD_GAME_PROMPT, max_tokens: int = 1000, temperature: float = 0.9, verbose: bool = False):
+        """
+        Initialize the Anthropic agent.
+
+        Args:
+            model_name (str): The name of the Claude model (e.g., "claude-3-5-sonnet-20241022").
+            system_prompt (Optional[str]): The system prompt to use (default: STANDARD_GAME_PROMPT).
+            max_tokens (int): The maximum number of tokens to generate.
+            temperature (float): The temperature for randomness in response generation.
+            verbose (bool): If True, additional debug info will be printed.
+        """
+        super().__init__()
+        self.model_name = model_name
+        self.system_prompt = system_prompt
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+        self.verbose = verbose
+        
+        try:
+            import anthropic
+        except ImportError:
+            raise ImportError(
+                "Anthropic package is required for AsyncAnthropicAgent. "
+                "Install it with: pip install anthropic"
+            )
+            
+        self.client = anthropic.AsyncAnthropic()
+    
+    async def _make_request(self, observation: str) -> str:
+        """Make a single API request to Anthropic and return the generated message."""
+        response = await self.client.messages.create(
+            model=self.model_name,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+            system=self.system_prompt,
+            messages=[
+                {"role": "user", "content": [{"type": "text", "text": observation}]}
+            ]
+        )
+        
+        return response.content[0].text.strip()
+    
+    async def _retry_request(self, observation: str, retries: int = 3, delay: int = 5) -> str:
+        """
+        Attempt to make an API request with retries.
+
+        Args:
+            observation (str): The input to process.
+            retries (int): The number of attempts to try.
+            delay (int): Seconds to wait between attempts.
+
+        Raises:
+            Exception: The last exception caught if all retries fail.
+        """
+        last_exception = None
+        for attempt in range(1, retries + 1):
+            try:
+                response = await self._make_request(observation)
+                if self.verbose:
+                    print(f"\nObservation: {observation}\nResponse: {response}")
+                return response
+            except Exception as e:
+                last_exception = e
+                print(f"Attempt {attempt} failed with error: {e}")
+                if attempt < retries:
+                    await asyncio.sleep(delay)
+        raise last_exception
+    
+    async def __call__(self, observation: str) -> str:
+        """
+        Process the observation using the Anthropic API and return the generated response.
+        
+        Args:
+            observation (str): The input string to process.
+        
+        Returns:
+            str: The generated response.
+        """
+        if not isinstance(observation, str):
+            raise ValueError(f"Observation must be a string. Received type: {type(observation)}")
+        return await self._retry_request(observation)
+    
 import textarena as ta
 import smithery
 import mcp
-from textarena.agents.basic_agents import AsyncAnthropicAgent
+import os
+import json
+
 
 class MCPAgent(AsyncAnthropicAgent):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.url = smithery.create_smithery_url(
-            "wss://server.smithery.ai/@kwen1510/nltk-map"
+            "wss://server.smithery.ai/@kwen1510/nltk-map/ws", {"e2bApiKey": os.environ["E2B_API_KEY"]}
         )
 
     async def _make_request(self, observation: str) -> str:
@@ -39,21 +130,9 @@ class MCPAgent(AsyncAnthropicAgent):
                             "content": [{"type": "text", "text": observation}],
                         }
                     ]
-                    
-                    # Add counter to limit tool calls
-                    tool_call_count = 0
 
                     # Loop to handle multiple tool calls in a conversation
                     while is_tool_call_pending:
-                        # Check if we've reached the maximum number of tool calls
-                        if tool_call_count >= 3:
-                            print("Reached maximum number of tool calls (3)")
-                            # Add a message to final response if there's none yet
-                            if not final_response_text:
-                                final_response_text = "Reached maximum number of tool calls (3). Providing partial results."
-                            is_tool_call_pending = False
-                            break
-                            
                         response = await self.client.messages.create(
                             model=self.model_name,
                             max_tokens=self.max_tokens,
@@ -61,7 +140,6 @@ class MCPAgent(AsyncAnthropicAgent):
                             system=self.system_prompt,
                             messages=messages,
                             tools=tools,
-                            tool_choice={"type": "any"}
                         )
 
                         print("Response:", response)
@@ -76,9 +154,8 @@ class MCPAgent(AsyncAnthropicAgent):
                                 tool_input = content_block.input
                                 tool_id = content_block.id
 
-                                # Increment tool call counter
-                                tool_call_count += 1
-                                print(f"Tool call {tool_call_count}/3: {tool_name}")
+                                print(f"Tool called: {tool_name}")
+                                print(f"Tool input: {json.dumps(tool_input, indent=2)}")
 
                                 # Execute the tool using MCP session
                                 try:
@@ -94,7 +171,7 @@ class MCPAgent(AsyncAnthropicAgent):
                                         tool_result_dict = {"error": str(e)}
 
                                 result_str = json.dumps(tool_result_dict)
-                                # print(f"Tool result: {result_str}")
+                                print(f"Tool result: {result_str}")
 
                                 # Add tool call and result to messages
                                 messages.append(
@@ -121,10 +198,7 @@ class MCPAgent(AsyncAnthropicAgent):
                                 # Accumulate text responses
                                 final_response_text += content_block.text
 
-                        # After processing all content blocks for this response and handling tool calls
-                        # Only add Assistant Pre-Fill if there are more tool calls to process
-                        if is_tool_call_pending:
-                            # Add Assistant Pre-Fill after tool calls are processed
+                            # Add Assistant Pre-Fill 
                             messages.append(
                                 {
                                     "role": "assistant",
@@ -134,12 +208,7 @@ class MCPAgent(AsyncAnthropicAgent):
 
                         # If no tool calls were made, we use the text response
                         if not is_tool_call_pending and not final_response_text:
-                            # Safer access to text content
-                            for block in response.content:
-                                if hasattr(block, "text"):
-                                    final_response_text = block.text
-                                    break
-                            
+                            final_response_text = response.content[0].text
                             final_response_text = "{\"thinking\"}" + final_response_text
                             final_response_text = json.loads(final_response_text)["action"]
 
@@ -149,3 +218,31 @@ class MCPAgent(AsyncAnthropicAgent):
                     raise e
 
             return final_response_text.strip()
+
+import textarena as ta
+
+# Initialize agents
+agents = MCPAgent(model_name="claude-3-7-sonnet-20250219"),
+
+# Initialize environment from subset and wrap it
+env = ta.make_online(
+    env_id=["SpellingBee-v0", "SimpleNegotiation-v0", "Poker-v0"], 
+    model_name="Test 123456789",
+    model_description="Test 123456789",
+    email="Test 123456789"
+)
+env = ta.wrappers.LLMObservationWrapper(env=env)
+
+
+env.reset(num_players=1)
+
+done = False
+
+while not done:
+    player_id, observation = env.get_observation()
+    action = asyncio.get_event_loop().run_until_complete(player_id)
+    done, info = env.step(action=action)
+    print("step complete")
+    
+rewards = env.close()
+print(rewards)

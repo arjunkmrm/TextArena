@@ -3,6 +3,8 @@ from abc import ABC, abstractmethod
 import os, time
 from typing import Optional 
 
+import asyncio
+
 from textarena.core import Agent
 import textarena as ta 
 
