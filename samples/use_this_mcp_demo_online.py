@@ -5,12 +5,12 @@ import asyncio
 from typing import Optional
 
 GAMES = {
-    "SpellingBee-v0": False,
+    "SpellingBee-v0": True,
     "SimpleNegotiation-v0": False,
     "Poker-v0": False,
     "Nim-v0": True,
-    "TruthAndDeception-v0": True,
-    "Snake-v0": True,
+    "TruthAndDeception-v0": False,
+    "Snake-v0": False,
 }
 
 GAMES_TO_RUN = [k for k, v in GAMES.items() if v]

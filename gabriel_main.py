@@ -1,5 +1,5 @@
 """
-uv run --with nltk --with anthropic run_online_simple.py
+uv run --with nltk --with anthropic --with google-genai gabriel_main.py
 """
 
 import textarena as ta
@@ -11,8 +11,8 @@ GAMES = {
     "SpellingBee-v0": False,
     "SimpleNegotiation-v0": False,
     "Poker-v0": False,
-    "Nim-v0": True,
-    "TruthAndDeception-v0": True,
+    "Nim-v0": False,
+    "TruthAndDeception-v0": False,
     "Snake-v0": True,
 
 }
@@ -33,6 +33,12 @@ The game rules may be more complex than what is evident in the observation.
    - `thinking_about_anticipated_moves`: A scratchpad where you document your reasoning about the anticipated moves, and how you will respond to them.
    - `action`: Your chosen move or response based on the game state.
 
+3. Remember to use the tools provided to you to make your move, if they are relevant to the game.
+     
+4. **Adaptability**: Remember that the actual game may include complexities not immediately apparent from the observation. Always refer to the detailed game instructions when making your decision.
+""".strip()
+
+"""
 3. **Game Examples**:
    - **SpellingBee-v0**: 
      - **Observation**: A list of words.
@@ -49,17 +55,15 @@ The game rules may be more complex than what is evident in the observation.
      - **Action**: Make a move (e.g., `"Bet 100"`).
      - **Example Output**: `{"thinking": "Assessing hand strength.", "action": "Bet 100"}`
 
-4. Remember to use the tools provided to you to make your move, if they are relevant to the game.
-     
-5. **Adaptability**: Remember that the actual game may include complexities not immediately apparent from the observation. Always refer to the detailed game instructions when making your decision.
-""".strip()
+"""
+
 
 # Initialize agent
 # agent = ta.agents.AnthropicAgent(model_name="claude-3-7-sonnet-20250219", temperature=1, system_prompt=SYSTEM_PROMPT, json_prefill=True) 
 # agent = ta.agents.OpenAIAgent(model_name="gpt-4.5-preview", temperature=1, system_prompt=SYSTEM_PROMPT, response_format={"type": "json_object"}, store=True)
 # agent = ta.agents.OpenAIAgent(model_name="gpt-4o-mini", temperature=1, system_prompt=SYSTEM_PROMPT, response_format={"type": "json_object"}, store=True)
 
-agent = ta.agents.OpenAIAgent(model_name="o3-mini", temperature=1, system_prompt=SYSTEM_PROMPT, response_format={"type": "json_object"}, store=True, reasoning_effort="medium")
+agent = ta.agents.OpenAIAgent(model_name="o3-mini", temperature=1, system_prompt=SYSTEM_PROMPT, response_format={"type": "json_object"}, store=True, reasoning_effort="low")
 # agent = ta.agents.GeminiAgent(model_name="gemini-2.0-pro-exp-02-05", system_prompt=SYSTEM_PROMPT)
 
 env = ta.make_online(
