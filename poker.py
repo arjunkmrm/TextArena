@@ -1,6 +1,15 @@
+from typing import Any
+import httpx
+from mcp.server.fastmcp import FastMCP
+import asyncio
+
 import random
 import itertools
 from collections import Counter
+
+# Initialize FastMCP server
+mcp = FastMCP("poker")
+
 
 # Card representations
 SUITS = ['hearts', 'diamonds', 'clubs', 'spades']
@@ -156,25 +165,20 @@ def parse_card(card_str):
     suit = suit_map.get(suit_char.lower())
     return Card(rank, suit)
 
-def main():
-    print("Poker Win Probability Calculator")
-    print("--------------------------------")
-    print("Enter cards in format: rank+suit (e.g., Ah for Ace of hearts, 10s for 10 of spades)")
-    print("Rank: 2-10, J, Q, K, A")
-    print("Suit: h (hearts), d (diamonds), c (clubs), s (spades)")
-    
+
+@mcp.tool()
+async def suggest_actions(my_cards_input: str, community_input: str, opponent_input: str ) -> str:    
     # Get your hand
-    my_cards_input = input("Enter your two cards (space-separated, e.g., 'As Kh'): ")
+    # my_cards_input = input("Enter your two cards (space-separated, e.g., 'As Kh'): ")
     my_cards = [parse_card(card.strip()) for card in my_cards_input.split()]
     
     # Get community cards
-    community_input = input("Enter community cards (space-separated, leave blank if none): ")
+    # community_input = input("Enter community cards (space-separated, leave blank if none): ")
     community_cards = []
     if community_input.strip():
         community_cards = [parse_card(card.strip()) for card in community_input.split()]
     
     # Get opponent's cards if known
-    opponent_input = input("Enter opponent cards if visible (space-separated, leave blank if unknown): ")
     opponent_cards = []
     if opponent_input.strip():
         opponent_cards = [parse_card(card.strip()) for card in opponent_input.split()]
@@ -186,11 +190,29 @@ def main():
     win_prob = game.calculate_win_probability(simulations=5000)
     print(f"\nYour win probability: {win_prob:.2f} ({win_prob*100:.1f}%)")
     print(f"Suggested action: {game.suggest_action(win_prob)}")
+
+    my_score = None
+    my_best = None
     
     if community_cards:
         my_score, my_best = game.find_best_hand(my_cards, community_cards)
         print(f"\nYour score currently: {my_score}")
         print(f"\nYour best hand currently: {my_best}")
+    
+    return {
+        "win_probability": win_prob,
+        "best_hand": my_best
+    }
 
 if __name__ == "__main__":
-    main()
+    print("Poker Win Probability Calculator")
+    print("--------------------------------")
+    print("Enter cards in format: rank+suit (e.g., Ah for Ace of hearts, 10s for 10 of spades)")
+    print("Rank: 2-10, J, Q, K, A")
+    print("Suit: h (hearts), d (diamonds), c (clubs), s (spades)")
+
+    my_cards_input = input("Your cards:")
+    community_input = input("Community cards:")
+    opponents_input = input("Opponent cards:")
+
+    asyncio.run(suggest_actions(my_cards_input=my_cards_input, community_input=community_input, opponent_input=opponents_input))
