@@ -3,16 +3,15 @@ from textarena.core import Agent
 import textarena as ta
 import asyncio
 from typing import Optional
+from openai import AsyncOpenAI
 
 GAMES = {
-    "SpellingBee-v0": False,
+    "SpellingBee-v0": True,
     "SimpleNegotiation-v0": False,
-    "Poker-v0": True,
+    "Poker-v0": False,
 }
 
 GAMES_TO_RUN = [k for k, v in GAMES.items() if v]
-
-MCP = "@arjunkmrm/textarena-mcp"
 
 STANDARD_GAME_PROMPT = """
 You are an elite competitive game player with a PhD in Game Theory. Your mission is to analyze the game instructions, assess the observation, and choose the optimal move to win as fast as possible.
@@ -63,7 +62,7 @@ Begin directly with your JSON output code block. Don't give any explanation or c
 
 class AsyncAnthropicAgent(Agent):
     """Agent class using the Anthropic Claude API to generate responses asynchronously."""
-    def __init__(self, model_name: str, system_prompt: Optional[str] = STANDARD_GAME_PROMPT, max_tokens: int = 1000, temperature: float = 0.9, verbose: bool = False):
+    def __init__(self, model_name: str, system_prompt: Optional[str] = STANDARD_GAME_PROMPT, max_tokens: int = 1000, temperature: float = 1.0, verbose: bool = False):
         """
         Initialize the Anthropic agent.
 
@@ -89,21 +88,22 @@ class AsyncAnthropicAgent(Agent):
                 "Install it with: pip install anthropic"
             )
             
-        self.client = anthropic.AsyncAnthropic()
+        self.client = AsyncOpenAI()
     
     async def _make_request(self, observation: str) -> str:
         """Make a single API request to Anthropic and return the generated message."""
-        response = await self.client.messages.create(
+        response = await self.client.chat.completions.create(
             model=self.model_name,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
-            system=self.system_prompt,
             messages=[
+                {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": [{"type": "text", "text": observation}]}
-            ]
+            ],
+            response_format={"type": "json_object"},
         )
         
-        return response.content[0].text.strip()
+        return response.choices[0].message.content.strip()
     
     async def _retry_request(self, observation: str, retries: int = 3, delay: int = 5) -> str:
         """
@@ -157,7 +157,7 @@ class MCPAgent(AsyncAnthropicAgent):
         super().__init__(*args, **kwargs)
 
         self.url = smithery.create_smithery_url(
-            f"wss://server.smithery.ai/{MCP}/ws"
+            "wss://server.smithery.ai/@kwen1510/nltk-map/ws"
         )
 
     async def _make_request(self, observation: str) -> str:
@@ -168,6 +168,8 @@ class MCPAgent(AsyncAnthropicAgent):
                 try:
                     tools_result = await session.list_tools()
                     tools = tools_result.model_dump()["tools"]
+
+                    print(tools)
 
                     tools = [
                         {"input_schema": tool.pop("inputSchema"), **tool}
@@ -181,6 +183,10 @@ class MCPAgent(AsyncAnthropicAgent):
                     is_tool_call_pending = True
                     messages = [
                         {
+                            "role": "system",
+                            "content": self.system_prompt,
+                        },
+                        {
                             "role": "user",
                             "content": [{"type": "text", "text": observation}],
                         }
@@ -188,12 +194,13 @@ class MCPAgent(AsyncAnthropicAgent):
 
                     # Loop to handle multiple tool calls in a conversation
                     while is_tool_call_pending:
-                        response = await self.client.messages.create(
+                        response = await self.client.chat.completions.create(
                             model=self.model_name,
                             max_tokens=self.max_tokens,
                             temperature=self.temperature,
-                            system=self.system_prompt,
                             messages=messages,
+                            response_format={"type": "json_object"},
+                            reasoning_effort="medium",
                             tools=tools,
                         )
 
@@ -263,33 +270,31 @@ class MCPAgent(AsyncAnthropicAgent):
                     raise e
                 
             final_text = final_response_text.strip()
-            
             try:
                 final_text = final_text.split("```json")[1]
-                final_text = "```json" + final_text
             except:
                 try:
                     final_text = final_text.split("```")[1]
-                    final_text = "```" + final_text
                 except:
                     pass
             final_text = final_text.replace("```json", "").replace("```", "")
             print(f"Final text: \n {final_text}")
             final_text = json.loads(final_text)["action"]
 
+
             return final_text
 
 import textarena as ta
 
 # Initialize agents
-agents = MCPAgent(model_name="claude-3-7-sonnet-20250219")
+agents = MCPAgent(model_name="o3-mini")
 
 # Initialize environment from subset and wrap it
 env = ta.make_online(
     env_id=GAMES_TO_RUN, 
-    model_name="sonnet-latest",
-    model_description="sonnet-latest",
-    email="sonnet-latest"
+    model_name="Test 123456789",
+    model_description="Test 123456789",
+    email="Test 123456789"
 )
 env = ta.wrappers.LLMObservationWrapper(env=env)
 
