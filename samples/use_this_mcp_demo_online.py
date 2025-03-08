@@ -264,7 +264,10 @@ class MCPAgent(AsyncAnthropicAgent):
             try:
                 final_text = final_text.split("```json")[1]
             except:
-                pass
+                try:
+                    final_text = final_text.split("```")[1]
+                except:
+                    pass
             final_text = final_text.replace("```json", "").replace("```", "")
             print(f"Final text: \n {final_text}")
             final_text = json.loads(final_text)["action"]
