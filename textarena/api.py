@@ -66,8 +66,8 @@ class OnlineEnvWrapper:
         self.info = {}
         
         # Timeouts for waiting
-        self.queue_timeout = 1800  # 30 minutes for matchmaking
-        self.game_timeout = 300    # 5 minutes for game moves
+        self.queue_timeout = 18000  # 30 minutes for matchmaking
+        self.game_timeout = 30000    # 5 minutes for game moves
         
         # Message queue for receiving websocket messages
         self.message_queue = asyncio.Queue()
