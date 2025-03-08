@@ -1,3 +1,4 @@
+import json
 from abc import ABC, abstractmethod
 import os, time
 from typing import Optional 
@@ -553,7 +554,7 @@ class AWSBedrockAgent(Agent):
 
 class AnthropicAgent(Agent):
     """Agent class using the Anthropic Claude API to generate responses."""
-    def __init__(self, model_name: str, system_prompt: Optional[str] = STANDARD_GAME_PROMPT, max_tokens: int = 1000, temperature: float = 0.9, verbose: bool = False):
+    def __init__(self, model_name: str, system_prompt: Optional[str] = STANDARD_GAME_PROMPT, max_tokens: int = 1000, temperature: float = 0.9, verbose: bool = False, thinking: bool = False, thinking_budget: int = 16_000):
         """
         Initialize the Anthropic agent.
 
@@ -570,6 +571,8 @@ class AnthropicAgent(Agent):
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.verbose = verbose
+        self.thinking: bool = False
+        self.thinking_budget: int = 16_000
         
         try:
             import anthropic
@@ -583,17 +586,31 @@ class AnthropicAgent(Agent):
     
     def _make_request(self, observation: str) -> str:
         """Make a single API request to Anthropic and return the generated message."""
+
+        if self.thinking:
+            extra_param = {
+                "thinking": {
+                    "type": "enabled",
+                    "budget_tokens": self.thinking_budget
+                }
+            }
+        else:
+            extra_param = {}
+
         response = self.client.messages.create(
             model=self.model_name,
-            max_tokens=self.max_tokens,
+            max_tokens=20_000,
             temperature=self.temperature,
             system=self.system_prompt,
             messages=[
                 {"role": "user", "content": [{"type": "text", "text": observation}]}
-            ]
+            ],
+            **extra_param
         )
         
-        return response.content[0].text.strip()
+        if self.thinking:
+            return json.loads(response.content[1].text.strip())["action"]
+        return json.loads(response.content[0].text.strip())["action"]
     
     def _retry_request(self, observation: str, retries: int = 3, delay: int = 5) -> str:
         """
@@ -637,7 +654,7 @@ class AnthropicAgent(Agent):
 
 class AsyncAnthropicAgent(Agent):
     """Agent class using the Anthropic Claude API to generate responses asynchronously."""
-    def __init__(self, model_name: str, system_prompt: Optional[str] = STANDARD_GAME_PROMPT, max_tokens: int = 1000, temperature: float = 0.9, verbose: bool = False):
+    def __init__(self, model_name: str, system_prompt: Optional[str] = STANDARD_GAME_PROMPT, max_tokens: int = 1000, temperature: float = 0.9, verbose: bool = False, thinking: bool = False, thinking_budget: int = 16_000):
         """
         Initialize the Anthropic agent.
 
@@ -654,6 +671,8 @@ class AsyncAnthropicAgent(Agent):
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.verbose = verbose
+        self.thinking: bool = False
+        self.thinking_budget: int = 16_000
         
         try:
             import anthropic
@@ -667,17 +686,30 @@ class AsyncAnthropicAgent(Agent):
     
     async def _make_request(self, observation: str) -> str:
         """Make a single API request to Anthropic and return the generated message."""
+
+        if self.thinking:
+            extra_param = {
+                "thinking": {
+                    "type": "enabled",
+                    "budget_tokens": self.thinking_budget
+                }
+            }
+        else:
+            extra_param = {}
+
         response = await self.client.messages.create(
             model=self.model_name,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
-            system=self.system_prompt,
             messages=[
                 {"role": "user", "content": [{"type": "text", "text": observation}]}
-            ]
+            ],
+            **extra_param
         )
         
-        return response.content[0].text.strip()
+        if self.thinking:
+            return json.loads(response.content[1].text.strip())["action"]
+        return json.loads(response.content[0].text.strip())["action"]
     
     async def _retry_request(self, observation: str, retries: int = 3, delay: int = 5) -> str:
         """

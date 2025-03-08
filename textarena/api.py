@@ -432,7 +432,7 @@ class OnlineEnvWrapper:
         await self.action_queue.put("CLOSE")
         
         # Close websocket connection
-        if self.websocket and not self.websocket.closed:
+        if self.websocket and not self.websocket.close:
             await self.websocket.close()
         
         return self.rewards
